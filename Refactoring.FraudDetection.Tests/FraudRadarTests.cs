@@ -8,6 +8,10 @@ using System.IO;
 using System.Linq;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Refactoring.FraudDetection.Model;
+using Refactoring.FraudDetection.Normalizer;
+using Refactoring.FraudDetection.Parser;
+using Refactoring.FraudDetection.Reader;
 
 namespace Refactoring.FraudDetection.Tests
 {
@@ -60,11 +64,11 @@ namespace Refactoring.FraudDetection.Tests
 
         private static List<FraudResult> ExecuteTest(string filePath)
         {
-            var fraudRadar = new FraudRadar();
+            var reader = new FraudRadarReader(filePath);
+            var orders = new FraudRadarParserDefault(reader).Parse();
+            var normalizedOrders = new FraudRadarOrderNormalizer().Normalize(orders);
 
-            IFraudRadarReader reader = new FraudRadarReader(filePath);
-
-            return fraudRadar.Check(reader).ToList();
+            return new FraudRadar().Check(normalizedOrders).ToList();
         }
     }
 }
