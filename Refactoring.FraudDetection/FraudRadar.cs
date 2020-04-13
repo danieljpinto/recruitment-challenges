@@ -5,6 +5,7 @@
 namespace Refactoring.FraudDetection
 {
     using Refactoring.FraudDetection.Model;
+    using Refactoring.FraudDetection.Rules;
     using System.Collections.Generic;
     using System.Linq;
 
@@ -15,13 +16,18 @@ namespace Refactoring.FraudDetection
             var orders = normalizedOrders.ToList();
 
             var fraudResults = new List<FraudResult>();
-            var fraudCheckerService = new Rules.FraudCheckerService();
+            var fraudCheckerService = new FraudCheckerService();
 
             for (int i = 0; i < orders.Count; i++)
             {
                 var isLastRow = i == orders.Count - 1;
 
-                var nextId = isLastRow ? i : i + 1;
+                if (isLastRow)
+                {
+                    break;
+                }
+
+                var nextId = i + 1;
 
                 var current = orders[i];
                 var next = orders[nextId];

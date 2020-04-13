@@ -10,7 +10,10 @@ namespace Refactoring.FraudDetection.Normalizer.Types
     {
         public override void Normalize(Order order)
         {
-            order.Street = order.Street.Replace("st.", "street").Replace("rd.", "road");
+            if (order?.Street != null)
+            {
+                order.Street = order.Street.Replace("st.", "street").Replace("rd.", "road");
+            }
 
             if (next != null)
             {

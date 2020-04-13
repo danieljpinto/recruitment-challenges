@@ -10,7 +10,7 @@ namespace Refactoring.FraudDetection.Reader
 
     public class FraudRadarReader : IFraudRadarReader
     {
-        private string _filePath;
+        private readonly string _filePath;
 
         public FraudRadarReader(string filePath)
         {

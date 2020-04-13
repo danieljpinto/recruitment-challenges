@@ -15,6 +15,9 @@ namespace Refactoring.FraudDetection.Rules
         {
             _fraudCheckers.Add(new FraudCheckerSameDealIdAndAddressWithDiffCreditCardRule());
             _fraudCheckers.Add(new FraudCheckerSameDealIdAndEmailWithDiffCreditCardRule());
+
+            // I'm not sure about the business rules, but does not feel right have two identical lines
+            _fraudCheckers.Add(new FraudCheckerCurrentAndNextHaveSameDataRule());
         }
 
         public bool ValidateRule(Order current, Order next)

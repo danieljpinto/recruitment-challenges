@@ -10,7 +10,14 @@ namespace Refactoring.FraudDetection.Normalizer.Types
     {
         public override void Normalize(Order order)
         {
-            order.State = order.State.Replace("il", "illinois").Replace("ca", "california").Replace("ny", "new york");
+            if (order?.State != null)
+            {
+                order.State = 
+                    order.State
+                        .Replace("il", "illinois")
+                        .Replace("ca", "california")
+                        .Replace("ny", "new york");
+            }
 
             if (next != null)
             {
