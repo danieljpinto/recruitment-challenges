@@ -7,18 +7,71 @@ namespace Refactoring.FraudDetection
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
 
-    public class FraudRadar
+    public interface IFraudRadarReader
     {
-        public IEnumerable<FraudResult> Check(string filePath)
+        IEnumerable<string> ReadAllLines();
+    }
+
+    public class FraudRadarReader : IFraudRadarReader
+    {
+        private string _filePath;
+
+        public FraudRadarReader(string filePath)
         {
-            // READ FRAUD LINES
+            if (!File.Exists(filePath))
+            {
+                throw new ArgumentException($"The provided path was not found ({filePath}).");
+            }
+
+            _filePath = filePath;
+        }
+
+        public IEnumerable<string> ReadAllLines()
+        {
+            if (string.IsNullOrEmpty(_filePath))
+            {
+                throw new Exception("File was not Open");
+            }
+
+            var result = new List<string>();
+
+            using (var file = new StreamReader(_filePath))
+            {
+                string ln;
+
+                while ((ln = file.ReadLine()) != null)
+                {
+                    result.Add(ln);
+                }
+
+                file.Close();
+            }
+
+            return result;
+        }
+    }
+
+    public interface IFraudRadarParser<T>
+    {
+        IEnumerable<T> Parse();
+    }
+
+    public class FraudRadarParserDefault : IFraudRadarParser<Order>
+    {
+        private readonly IEnumerable<string> _content;
+
+        public FraudRadarParserDefault(IEnumerable<string> content)
+        {
+            _content = content ?? throw new ArgumentException("No content was sent. Can't parse an empty file.", nameof(content));
+        }
+
+        public IEnumerable<Order> Parse()
+        {
             var orders = new List<Order>();
-            var fraudResults = new List<FraudResult>();
 
-            var lines = File.ReadAllLines(filePath);
-
-            foreach (var line in lines)
+            foreach (var line in _content)
             {
                 var items = line.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
 
@@ -37,86 +90,156 @@ namespace Refactoring.FraudDetection
                 orders.Add(order);
             }
 
+            return orders;
+        }
+    }
+
+    public class FraudRadar
+    {
+        public IEnumerable<FraudResult> Check(IFraudRadarReader reader)
+        {
+            var fraudResults = new List<FraudResult>();
+
+            var lines = reader.ReadAllLines();
+
+            var parser = new FraudRadarParserDefault(lines);
+
+            var orders = parser.Parse();
+
             // NORMALIZE
+            var n1 = new FraudRadarEmailNormalizer();
+            var n2 = new FraudRadarStreetNormalizer();
+            var n3 = new FraudRadarStateNormalizer();
+
+            n1.SetNextNormalizer(n2);
+            n2.SetNextNormalizer(n3);
+
             foreach (var order in orders)
             {
-                //Normalize email
-                var aux = order.Email.Split(new char[] { '@' }, StringSplitOptions.RemoveEmptyEntries);
-
-                var atIndex = aux[0].IndexOf("+", StringComparison.Ordinal);
-
-                aux[0] = atIndex < 0 ? aux[0].Replace(".", "") : aux[0].Replace(".", "").Remove(atIndex);
-
-                order.Email = string.Join("@", new string[] { aux[0], aux[1] });
-
-                //Normalize street
-                order.Street = order.Street.Replace("st.", "street").Replace("rd.", "road");
-
-                //Normalize state
-                order.State = order.State.Replace("il", "illinois").Replace("ca", "california").Replace("ny", "new york");
+                n1.Normalize(order);
             }
 
             // CHECK FRAUD
-            for (int i = 0; i < orders.Count; i++)
+            var nOrders = orders.ToList();
+
+            for (int i = 0; i < nOrders.Count; i++)
             {
-                var current = orders[i];
-                bool isFraudulent = false;
+                var nextId = i == nOrders.Count - 1 ? i : i + 1;
 
-                for (int j = i + 1; j < orders.Count; j++)
+                var current = nOrders[i];
+                var next = nOrders[nextId];
+
+                bool isFraudulent;
+
+                isFraudulent = false;
+
+                if (current.DealId == next.DealId
+                    && current.Email == next.Email
+                    && current.CreditCard != next.CreditCard)
                 {
-                    isFraudulent = false;
+                    isFraudulent = true;
+                }
 
-                    if (current.DealId == orders[j].DealId
-                        && current.Email == orders[j].Email
-                        && current.CreditCard != orders[j].CreditCard)
-                    {
-                        isFraudulent = true;
-                    }
+                if (current.DealId == next.DealId
+                    && current.State == next.State
+                    && current.ZipCode == next.ZipCode
+                    && current.Street == next.Street
+                    && current.City == next.City
+                    && current.CreditCard != next.CreditCard)
+                {
+                    isFraudulent = true;
+                }
 
-                    if (current.DealId == orders[j].DealId
-                        && current.State == orders[j].State
-                        && current.ZipCode == orders[j].ZipCode
-                        && current.Street == orders[j].Street
-                        && current.City == orders[j].City
-                        && current.CreditCard != orders[j].CreditCard)
-                    {
-                        isFraudulent = true;
-                    }
-
-                    if (isFraudulent)
-                    {
-                        fraudResults.Add(new FraudResult { IsFraudulent = true, OrderId = orders[j].OrderId });
-                    }
+                if (isFraudulent)
+                {
+                    fraudResults.Add(new FraudResult { IsFraudulent = true, OrderId = next.OrderId });
                 }
             }
 
             return fraudResults;
         }
+    }
 
-        public class FraudResult
+    public class FraudResult
+    {
+        public int OrderId { get; set; }
+
+        public bool IsFraudulent { get; set; }
+    }
+
+    public class Order
+    {
+        public int OrderId { get; set; }
+
+        public int DealId { get; set; }
+
+        public string Email { get; set; }
+
+        public string Street { get; set; }
+
+        public string City { get; set; }
+
+        public string State { get; set; }
+
+        public string ZipCode { get; set; }
+
+        public string CreditCard { get; set; }
+    }
+
+    public abstract class FraudRadarNormalizer<T>
+    {
+        protected FraudRadarNormalizer<T> next;
+
+        public void SetNextNormalizer(FraudRadarNormalizer<T> next)
         {
-            public int OrderId { get; set; }
-
-            public bool IsFraudulent { get; set; }
+            this.next = next;
         }
 
-        public class Order
+        public abstract void Normalize(T item);
+    }
+
+    public class FraudRadarEmailNormalizer : FraudRadarNormalizer<Order>
+    {
+        public override void Normalize(Order order)
         {
-            public int OrderId { get; set; }
+            var aux = order.Email.Split(new char[] { '@' }, StringSplitOptions.RemoveEmptyEntries);
 
-            public int DealId { get; set; }
+            var atIndex = aux[0].IndexOf("+", StringComparison.Ordinal);
 
-            public string Email { get; set; }
+            aux[0] = atIndex < 0 ? aux[0].Replace(".", "") : aux[0].Replace(".", "").Remove(atIndex);
 
-            public string Street { get; set; }
+            order.Email = string.Join("@", new string[] { aux[0], aux[1] });
 
-            public string City { get; set; }
+            if (base.next != null)
+            {
+                base.next.Normalize(order);
+            }
+        }
+    }
 
-            public string State { get; set; }
+    public class FraudRadarStreetNormalizer : FraudRadarNormalizer<Order>
+    {
+        public override void Normalize(Order order)
+        {
+            order.Street = order.Street.Replace("st.", "street").Replace("rd.", "road");
 
-            public string ZipCode { get; set; }
+            if (base.next != null)
+            {
+                base.next.Normalize(order);
+            }
+        }
+    }
 
-            public string CreditCard { get; set; }
+    public class FraudRadarStateNormalizer : FraudRadarNormalizer<Order>
+    {
+        public override void Normalize(Order order)
+        {
+            order.State = order.State.Replace("il", "illinois").Replace("ca", "california").Replace("ny", "new york");
+
+            if (base.next != null)
+            {
+                base.next.Normalize(order);
+            }
         }
     }
 }
